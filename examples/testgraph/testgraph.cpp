@@ -84,6 +84,19 @@ inline vector<Edge> generateEdgeInsertions(PGraph x, int batchSize, bool isSymme
 }
 
 
+// Copy graph.
+inline PGraph copy_graph(PGraph x) {
+  PGraph y  = TNGraph::New();
+  TNGraph::TNodeI vb = x->BegNI(), ve = x->EndNI();
+  TNGraph::TEdgeI eb = x->BegEI(), ee = x->EndEI();
+  for (TNGraph::TNodeI it=vb; it<ve; it++)
+    y->AddNode(it.GetId());
+  for (TNGraph::TEdgeI it=eb; it<ee; it++)
+    y->AddEdge(it.GetSrcNId(), it.GetDstNId());
+  return y;
+}
+
+
 // Main function.
 int main(int argc, char* argv[]) {
   char *file = argv[1];
@@ -114,7 +127,7 @@ int main(int argc, char* argv[]) {
       vector<Edge> deletions = generateEdgeDeletions(x, batchSize, symmetric);
       printf("Cloning graph ...\n");
       clock_t t0 = timeNow();
-      PGraph y = TSnap::ConvertGraph<PGraph>(x);
+      PGraph y = copy_graph(x);
       clock_t t1 = timeNow();
       printf("Nodes: %d, Edges: %d\n", y->GetNodes(), y->GetEdges());
       printf("Elapsed time: %.2f ms\n", duration(t0, t1));
@@ -137,7 +150,7 @@ int main(int argc, char* argv[]) {
       vector<Edge> insertions = generateEdgeInsertions(x, batchSize, symmetric);
       printf("Cloning graph ...\n");
       clock_t t0 = timeNow();
-      PGraph y = TSnap::ConvertGraph<PGraph>(x);
+      PGraph y = copy_graph(x);
       clock_t t1 = timeNow();
       printf("Nodes: %d, Edges: %d\n", y->GetNodes(), y->GetEdges());
       printf("Elapsed time: %.2f ms\n", duration(t0, t1));
