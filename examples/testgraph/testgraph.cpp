@@ -97,6 +97,17 @@ inline PGraph copy_graph(PGraph x) {
 }
 
 
+// Load graph.
+inline PGraph load_graph(const char *file) {
+  PGraph x = TSnap::LoadEdgeList<PGraph>(file, 0, 1);
+  for (int i=1; i<=x->GetNodes(); ++i) {
+    if (x->IsNode(i)) continue;
+    x->AddNodeUnchecked(i);
+  }
+  return x;
+}
+
+
 // Main function.
 int main(int argc, char* argv[]) {
   char *file = argv[1];
@@ -107,11 +118,7 @@ int main(int argc, char* argv[]) {
   // Load graph from Edgelist file.
   printf("Loading graph %s [nodes=%d, edges=%d] ...\n", file, rows, size);
   clock_t t0 = timeNow();
-  PGraph x = TSnap::LoadEdgeList<PGraph>(file, 0, 1);
-  for (int i=1; i<=rows; ++i) {
-    if (x->IsNode(i)) continue;
-    x->AddNodeUnchecked(i);
-  }
+  PGraph   x = load_graph(file);
   clock_t t1 = timeNow();
   printf("Nodes: %d, Edges: %d\n", x->GetNodes(), x->GetEdges());
   printf("Elapsed time: %.2f ms\n", duration(t0, t1));
@@ -125,9 +132,9 @@ int main(int argc, char* argv[]) {
     // Perform edge deletions.
     {
       vector<Edge> deletions = generateEdgeDeletions(x, batchSize, symmetric);
-      printf("Cloning graph ...\n");
+      printf("Reloading graph ...\n");
       clock_t t0 = timeNow();
-      PGraph y = copy_graph(x);
+      PGraph   y = load_graph(file);
       clock_t t1 = timeNow();
       printf("Nodes: %d, Edges: %d\n", y->GetNodes(), y->GetEdges());
       printf("Elapsed time: %.2f ms\n", duration(t0, t1));
@@ -148,9 +155,9 @@ int main(int argc, char* argv[]) {
     // Perform edge insertions.
     {
       vector<Edge> insertions = generateEdgeInsertions(x, batchSize, symmetric);
-      printf("Cloning graph ...\n");
+      printf("Reloading graph ...\n");
       clock_t t0 = timeNow();
-      PGraph y = copy_graph(x);
+      PGraph   y = load_graph(file);
       clock_t t1 = timeNow();
       printf("Nodes: %d, Edges: %d\n", y->GetNodes(), y->GetEdges());
       printf("Elapsed time: %.2f ms\n", duration(t0, t1));
