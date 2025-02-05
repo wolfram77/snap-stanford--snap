@@ -4,6 +4,7 @@
 #include <ctime>
 #include <string>
 #include <vector>
+#include <iterator>
 
 using namespace std;
 
@@ -108,6 +109,55 @@ inline PGraph load_graph(const char *file) {
 }
 
 
+// Test transpose graph.
+inline void test_transpose_graph(PGraph x) {
+  PGraph y = TNGraph::New();
+  printf("Transposing graph ...\n");
+  clock_t t0 = timeNow();
+  TNGraph::TNodeI vb = x->BegNI(), ve = x->EndNI();
+  TNGraph::TEdgeI eb = x->BegEI(), ee = x->EndEI();
+  for (TNGraph::TNodeI it=vb; it<ve; it++)
+    y->AddNode(it.GetId());
+  for (TNGraph::TEdgeI it=eb; it<ee; it++)
+    y->AddEdge(it.GetDstNId(), it.GetSrcNId());
+  clock_t t1 = timeNow();
+  printf("Nodes: %d, Edges: %d\n", y->GetNodes(), y->GetEdges());
+  printf("Elapsed time: %.2f ms\n", duration(t0, t1));
+  y->Clr();
+}
+
+
+// Test multi-step visit count with BFS, from all vertices.
+inline void test_visit_count_bfs(PGraph x, int steps) {
+  printf("Testing multi-step visit count with BFS ...\n");
+  int n = x->GetNodes();
+  int m = x->GetEdges();
+  vector<size_t> visits0(n, 1);
+  vector<size_t> visits1(n, 0);
+  clock_t t0 = timeNow();
+  for (int s=0; s<steps; ++s) {
+    #pragma omp parallel for schedule(dynamic, 512)
+    for (int u=0; u<n; ++u) {
+      if (!x->IsNode(u)) continue;
+      visits0[u] = 0;
+      TNGraph::TNodeI vb = x->GetNI(u);
+      int d = vb.GetOutDeg();
+      for (int j=0; j<d; ++j) {
+        int v = vb.GetOutNId(j);
+        visits1[u] += visits0[v];
+      }
+    }
+    swap(visits0, visits1);
+  }
+  clock_t t1 = timeNow();
+  size_t total = 0;
+  for (int i=0; i<n; ++i)
+    total += visits0[i];
+  printf("Total visits: %zu\n", total);
+  printf("Elapsed time: %.2f ms\n", duration(t0, t1));
+}
+
+
 // Main function.
 int main(int argc, char* argv[]) {
   char *file = argv[1];
@@ -115,6 +165,7 @@ int main(int argc, char* argv[]) {
   bool weighted  = argc>3? atoi(argv[3]) : false;
   int  rows      = argc>4? atoi(argv[4]) : 0;
   int  size      = argc>5? atoi(argv[5]) : 0;
+  int  steps     = argc>6? atoi(argv[6]) : 42;
   // Load graph from Edgelist file.
   printf("Loading graph %s [nodes=%d, edges=%d] ...\n", file, rows, size);
   clock_t t0 = timeNow();
@@ -122,22 +173,20 @@ int main(int argc, char* argv[]) {
   clock_t t1 = timeNow();
   printf("Nodes: %d, Edges: %d\n", x->GetNodes(), x->GetEdges());
   printf("Elapsed time: %.2f ms\n", duration(t0, t1));
+  test_transpose_graph(x);
+  int n = x->GetNodes();
+  int m = x->GetEdges();
+  x->Clr();
   printf("\n");
   // Perform batch updates of varying sizes.
   for (int batchPower=-7; batchPower<=-1; ++batchPower) {
-    int m = x->GetEdges();
     double batchFraction = pow(10, batchPower);
     int batchSize = int(round(batchFraction * m));
     printf("Batch fraction: %.1e [%d edges]\n", batchFraction, batchSize);
     // Perform edge deletions.
     {
-      vector<Edge> deletions = generateEdgeDeletions(x, batchSize, symmetric);
-      printf("Reloading graph ...\n");
-      clock_t t0 = timeNow();
-      PGraph   y = load_graph(file);
-      clock_t t1 = timeNow();
-      printf("Nodes: %d, Edges: %d\n", y->GetNodes(), y->GetEdges());
-      printf("Elapsed time: %.2f ms\n", duration(t0, t1));
+      PGraph y = load_graph(file);  // Reloading graph is faster than copying
+      vector<Edge> deletions = generateEdgeDeletions(y, batchSize, symmetric);
       printf("Deleting edges [%zu edges] ...\n", deletions.size());
       clock_t t2 = timeNow();
       for (int i=0; i<deletions.size(); ++i) {
@@ -151,16 +200,13 @@ int main(int argc, char* argv[]) {
         Edge e = deletions[i];
         Assert(!y->IsEdge(e.u, e.v));
       }
+      test_visit_count_bfs(y, steps);
+      y->Clr();
     }
     // Perform edge insertions.
     {
-      vector<Edge> insertions = generateEdgeInsertions(x, batchSize, symmetric);
-      printf("Reloading graph ...\n");
-      clock_t t0 = timeNow();
-      PGraph   y = load_graph(file);
-      clock_t t1 = timeNow();
-      printf("Nodes: %d, Edges: %d\n", y->GetNodes(), y->GetEdges());
-      printf("Elapsed time: %.2f ms\n", duration(t0, t1));
+      PGraph y = load_graph(file);  // Reloading graph is faster than copying
+      vector<Edge> insertions = generateEdgeInsertions(y, batchSize, symmetric);
       printf("Inserting edges [%zu edges] ...\n", insertions.size());
       clock_t t2 = timeNow();
       for (int i=0; i<insertions.size(); ++i) {
@@ -174,6 +220,8 @@ int main(int argc, char* argv[]) {
         Edge e = insertions[i];
         Assert(y->IsEdge(e.u, e.v));
       }
+      test_visit_count_bfs(y, steps);
+      y->Clr();
     }
     printf("\n");
   }
