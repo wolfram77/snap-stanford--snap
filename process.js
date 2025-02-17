@@ -3,10 +3,14 @@ const os = require('os');
 const path = require('path');
 const readline = require('readline');
 
-const RGRAPH = /^Running cuGraph Louvain on \s*.*\/(.*?)\.mtx\.csv/m;
-const RORDER = /^order: (.+?) size: (.+) \[directed\] \{\}/m;
-const RMODUL = /^Louvain modularity: (.+)/m;
-const RTTIME = /^Louvain took: (.+?) s/m;
+const RGRAPH = /^Running on \s*.*\/(.*?)\.mtx\.edges \.\.\./m;
+const RORDER = /^Nodes: (\d+), Edges: (\d+)/m;
+const RBATCH = /^Batch fraction: (.+?) \[(.+?) edges\]/m;
+const RTRANS = /^Transposing graph \.\.\./m;
+const RDELET = /^Deleting edges \[(.+?) edges\] \.\.\./m;
+const RINSRT = /^Inserting edges \[(.+?) edges\] \.\.\./m;
+const RVISIT = /^Testing multi-step visit count with BFS \.\.\./m;
+const RETIME = /^Elapsed time: (.+?) ms/m;
 
 
 
@@ -53,22 +57,39 @@ function readLogLine(ln, data, state) {
     state.graph = graph;
     state.order = 0;
     state.size  = 0;
-    state.time  = 0;
-    state.modularity  = 0;
+    state.batch_fraction = 0;
+    state.batch_edges    = 0;
+    state.time      = 0;
+    state.technique = 'readGraph';
   }
   else if (RORDER.test(ln)) {
     var [, order, size] = RORDER.exec(ln);
     state.order = parseFloat(order);
     state.size  = parseFloat(size);
   }
-  else if (RMODUL.test(ln)) {
-    var [, modularity] = RMODUL.exec(ln);
-    state.modularity = parseFloat(modularity);
+  else if (RBATCH.test(ln)) {
+    var [, batch_fraction, batch_edges] = RBATCH.exec(ln);
+    state.batch_fraction = parseFloat(batch_fraction);
+    state.batch_edges    = parseFloat(batch_edges);
   }
-  else if (RTTIME.test(ln)) {
-    var [, time] = RTTIME.exec(ln);
+  else if (RTRANS.test(ln)) {
+    state.technique = 'transposeGraph';
+  }
+  else if (RDELET.test(ln)) {
+    state.technique = 'deleteEdges';
+  }
+  else if (RINSRT.test(ln)) {
+    state.technique = 'insertEdges';
+  }
+  else if (RVISIT.test(ln)) {
+    var isInsert = state.technique==='insertEdges';
+    var isVisitP = state.technique==='visitGraph+';
+    state.technique = isInsert || isVisitP? 'visitGraph+' : 'visitGraph-';
+  }
+  else if (RETIME.test(ln)) {
+    var [, time] = RETIME.exec(ln);
     data.get(state.graph).push(Object.assign({}, state, {
-      time: parseFloat(time) * 1000,
+      time: parseFloat(time),
     }));
   }
   return state;
